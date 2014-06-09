@@ -29,13 +29,23 @@ struct PS_IN
 	float4 col : COLOR;
 };
 
-float4x4 WorldViewProj;
+cbuffer universal : C0
+{
+	float4x4 WorldViewProj;
+}
 
-PS_IN VS( VS_IN input )
+cbuffer data : C1
+{
+	float4x4 World;
+}
+
+PS_IN VS(VS_IN input)
 {
 	PS_IN output = (PS_IN)0;
 	
-	output.pos = mul(input.pos, WorldViewProj);
+	float4 pos = input.pos;
+
+		output.pos = mul(pos, mul(WorldViewProj, World));
 	output.col = input.col;
 	
 	return output;

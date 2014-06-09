@@ -85,7 +85,7 @@ namespace MultiCube
                 // Number of threads to run concurrently 
                 ThreadCount = 4,
                 // Use deferred by default
-                Type = TestType.Deferred,
+                Type = TestType.FrozenDeferred,
                 // BurnCpu by default
                 SimulateCpuUsage = true,
                 // Default is using Map/Unmap
@@ -211,6 +211,7 @@ namespace MultiCube
             // Create Constant Buffer 
             var staticContantBuffer = ToDispose(new Buffer(device, Utilities.SizeOf<Matrix>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0));
             var dynamicConstantBuffer = ToDispose(new Buffer(device, Utilities.SizeOf<Matrix>(), ResourceUsage.Dynamic, BindFlags.ConstantBuffer, CpuAccessFlags.Write, ResourceOptionFlags.None, 0));
+            var universalConstantBuffer = ToDispose(new Buffer(device, Utilities.SizeOf<Matrix>(), ResourceUsage.Dynamic, BindFlags.ConstantBuffer, CpuAccessFlags.Write, ResourceOptionFlags.None, 0));
 
             // Create Depth Buffer & View 
             var depthBuffer = ToDispose(new Texture2D(device, new Texture2DDescription()
@@ -303,6 +304,7 @@ namespace MultiCube
                     renderingContext.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
                     renderingContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(vertices, Utilities.SizeOf<Vector4>() * 2, 0));
                     renderingContext.VertexShader.SetConstantBuffer(0, currentState.UseMap ? dynamicConstantBuffer : staticContantBuffer);
+                    renderingContext.VertexShader.SetConstantBuffer(1, universalConstantBuffer);
                     renderingContext.VertexShader.Set(vertexShader);
                     renderingContext.Rasterizer.SetViewport(0, 0, form.ClientSize.Width, form.ClientSize.Height);
                     renderingContext.PixelShader.Set(pixelShader);
@@ -325,7 +327,7 @@ namespace MultiCube
                 }
 
                 int count = currentState.CountCubes;
-                float divCubes = (float)count / (viewZ - 1);
+                float divCubes = (float)count / (viewZ - 3);
 
                 var rotateMatrix = Matrix.Scaling(1.0f / count) * Matrix.RotationX(time) * Matrix.RotationY(time * 2) * Matrix.RotationZ(time * .7f);
 
@@ -333,8 +335,8 @@ namespace MultiCube
                 {
                     for (int x = 0; x < count; x++)
                     {
-                        rotateMatrix.M41 = (x + .5f - count * .5f) / divCubes;
-                        rotateMatrix.M42 = (y + .5f - count * .5f) / divCubes;
+                        //rotateMatrix.M41 = (x + .5f - count * .5f) / divCubes;
+                        //rotateMatrix.M42 = (y + .5f - count * .5f) / divCubes;
 
                         // Update WorldViewProj Matrix 
                         Matrix worldViewProj;
@@ -351,16 +353,28 @@ namespace MultiCube
                             }
                         }
 
-                        if (currentState.UseMap)
-                        {
-                            var dataBox = renderingContext.MapSubresource(dynamicConstantBuffer, 0, MapMode.WriteDiscard, MapFlags.None);
-                            Utilities.Write(dataBox.DataPointer, ref worldViewProj);
-                            renderingContext.UnmapSubresource(dynamicConstantBuffer, 0);
-                        }
-                        else
-                        {
-                            renderingContext.UpdateSubresource(ref worldViewProj, staticContantBuffer);
-                        }
+
+
+                        
+
+                        float fx = (x + .5f - count * .5f) / divCubes;
+                        float fy = (y + .5f - count * .5f) / divCubes;
+                        Matrix world = Matrix.Translation(fx, fy, 0);
+                        world.Transpose();
+                        var dataBox = renderingContext.MapSubresource(universalConstantBuffer, 0, MapMode.WriteDiscard, MapFlags.None);
+                        Utilities.Write(dataBox.DataPointer, ref world);
+                        renderingContext.UnmapSubresource(universalConstantBuffer, 0);
+
+                        //if (currentState.UseMap)
+                        //{
+                        //    var dataBox = renderingContext.MapSubresource(dynamicConstantBuffer, 0, MapMode.WriteDiscard, MapFlags.None);
+                        //    Utilities.Write(dataBox.DataPointer, ref worldViewProj);
+                        //    renderingContext.UnmapSubresource(dynamicConstantBuffer, 0);
+                        //}
+                        //else
+                        //{
+                        //    renderingContext.UpdateSubresource(ref worldViewProj, staticContantBuffer);
+                        //}
 
                         // Draw the cube 
                         renderingContext.Draw(36, 0);
@@ -437,9 +451,22 @@ namespace MultiCube
                         RenderDeferred(currentState.ThreadCount);
                     }
 
+                    var time = clock.ElapsedMilliseconds / 1000.0f;
+                    var rotateMatrix = Matrix.Scaling(1.0f / currentState.CountCubes) * Matrix.RotationX(time) * Matrix.RotationY(time * 2) * Matrix.RotationZ(time * .7f);
+                    Matrix worldViewProj;
+                    Matrix.Multiply(ref rotateMatrix, ref viewProj, out worldViewProj);
+                    worldViewProj.Transpose();
+
                     for (int i = 0; i < currentState.ThreadCount; i++)
                     {
                         var commandList = commandLists[i];
+
+                        //immediateContext.UpdateSubresource(ref worldViewProj, staticContantBuffer);
+
+                        var dataBox = immediateContext.MapSubresource(dynamicConstantBuffer, 0, MapMode.WriteDiscard, MapFlags.None);
+                        Utilities.Write(dataBox.DataPointer, ref worldViewProj);
+                        immediateContext.UnmapSubresource(dynamicConstantBuffer, 0);
+
                         // Execute the deferred command list on the immediate context
                         immediateContext.ExecuteCommandList(commandList, false);
 
