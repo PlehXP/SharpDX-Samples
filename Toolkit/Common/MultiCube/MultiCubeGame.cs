@@ -33,6 +33,7 @@ namespace MultiCube
     using System.Reflection;
 using System.Diagnostics;
     using SharpDX.Direct3D;
+    using SharpDX.Toolkit.Input;
 
     /// <summary>
     /// Simple MultiCube application using SharpDX.Toolkit.
@@ -95,6 +96,8 @@ using System.Diagnostics;
         DepthStencilView depthStencilView;
         RenderTargetView[] renderTargets;
 
+        private readonly KeyboardManager _keyboardManager;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="MultiCubeGame" /> class.
         /// </summary>
@@ -108,6 +111,9 @@ using System.Diagnostics;
             // Setup the relative directory to the executable directory
             // for loading contents with the ContentManager
             Content.RootDirectory = "Content";
+
+            // initialize the keyboard manager
+            _keyboardManager = new KeyboardManager(this);
         }
 
         protected override void LoadContent()
@@ -288,11 +294,36 @@ using System.Diagnostics;
         protected override void Update(GameTime gameTime)
         {
             // Rotate the cube.
-            var time = (float)gameTime.TotalGameTime.TotalSeconds;
+            //var time = (float)gameTime.TotalGameTime.TotalSeconds;
             //basicEffect.World = Matrix.RotationX(time) * Matrix.RotationY(time * 2.0f) * Matrix.RotationZ(time * .7f);
             
             //basicEffect.View = Matrix.LookAtLH(new Vector3(0, 0, -viewZ), new Vector3(0, 0, 0), Vector3.UnitY);
             //basicEffect.Projection = Matrix.PerspectiveFovLH((float)Math.PI / 4.0f, Window.ClientBounds.Width / (float)Window.ClientBounds.Height, 0.1f, 100.0f);
+
+            var keyboardState = _keyboardManager.GetState();
+
+            if (keyboardState.IsKeyPressed(Keys.Left) && nextState.CountCubes > 1)
+                nextState.CountCubes--; switchToNextState = true;
+            if (keyboardState.IsKeyPressed(Keys.Right) && nextState.CountCubes < MaxNumberOfCubes)
+                nextState.CountCubes++; switchToNextState = true;
+
+            if (keyboardState.IsKeyPressed(Keys.F1))
+                nextState.Type = (TestType)((((int)nextState.Type) + 1) % 3); switchToNextState = true;
+            if (keyboardState.IsKeyPressed(Keys.F2))
+                nextState.UseMap = !nextState.UseMap; switchToNextState = true;
+            if (keyboardState.IsKeyPressed(Keys.F3))
+                nextState.SimulateCpuUsage = !nextState.SimulateCpuUsage; switchToNextState = true;
+
+            if (nextState.Type == TestType.Deferred)
+            {
+                if (keyboardState.IsKeyPressed(Keys.Down) && nextState.ThreadCount > 1)
+                    nextState.ThreadCount--; switchToNextState = true;
+                if (keyboardState.IsKeyPressed(Keys.Up) && nextState.ThreadCount < MaxNumberOfThreads)
+                    nextState.ThreadCount++; switchToNextState = true;
+            }
+            if (keyboardState.IsKeyPressed(Keys.Escape))
+                nextState.Exit = true; switchToNextState = true;
+
 
             // Handle base.Update
             base.Update(gameTime);
@@ -340,18 +371,10 @@ using System.Diagnostics;
 
             for (int i = 0; i < threadCount; i++)
             {
-                //var renderingContext = deviceContextPerThread[i];
-                // Prepare All the stages 
-                //renderingContext.InputAssembler.InputLayout = inputLayout.BufferLayouts[0];
-                //renderingContext.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
-                //renderingContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(vertices, Utilities.SizeOf<Vector4>() * 2, 0));
-                //renderingContext.VertexShader.SetConstantBuffer(0, currentState.UseMap ? dynamicConstantBuffer : staticContantBuffer);
-                //renderingContext.VertexShader.Set(vertexShader);
-                //renderingContext.Rasterizer.SetViewport(0, 0, Window.ClientBounds.Width, Window.ClientBounds.Height);
-                //renderingContext.PixelShader.Set(pixelShader);
-                //renderingContext.OutputMerger.SetTargets(depthStencilView, renderTargets);
-
                 var renderingGraphicsDevice = graphicsDevicePerThread[i];
+
+                renderingGraphicsDevice.SetRenderTargets(GraphicsDevice.DepthStencilBuffer, GraphicsDevice.BackBuffer);
+
                 // Setup the vertices
                 renderingGraphicsDevice.SetVertexBuffer(vertices);
                 renderingGraphicsDevice.SetVertexInputLayout(inputLayout);
